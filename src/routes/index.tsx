@@ -137,14 +137,13 @@ function Drive() {
   // navigation: reroute when off-route, speak instructions
   const navInfo = useMemo(() => {
     if (!navOn || !route || !pos) return null;
-    let idx = route.steps.findIndex((s, i) => i > 0 && haversine(pos, { lat: s.loc[1], lng: s.loc[0] }) > 25 && remainingFrom(route, i, pos) >= 0);
-    // choose the next maneuver ahead: nearest step after the closest one passed
+    // next maneuver: the one after the closest step once we've reached it
     let best = 1, bestD = Infinity;
     route.steps.forEach((s, i) => {
       const d = haversine(pos, { lat: s.loc[1], lng: s.loc[0] });
       if (d < bestD) { bestD = d; best = i; }
     });
-    idx = bestD < 30 ? Math.min(best + 1, route.steps.length - 1) : Math.max(1, best);
+    const idx = bestD < 30 ? Math.min(best + 1, route.steps.length - 1) : Math.max(1, best);
     const step = route.steps[idx];
     const toStep = haversine(pos, { lat: step.loc[1], lng: step.loc[0] });
     const rest = route.steps.slice(idx).reduce((s, x) => s + x.distance, 0) + toStep - step.distance;
@@ -393,8 +392,6 @@ function Drive() {
     </main>
   );
 }
-
-function remainingFrom(_r: NavRoute, _i: number, _p: Pt) { return 0; }
 
 function PlaceRow({ p, onClick }: { p: Place; onClick: () => void }) {
   return (
