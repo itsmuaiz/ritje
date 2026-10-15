@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RittenIndexRouteImport } from './routes/ritten.index'
+import { Route as RittenIdRouteImport } from './routes/ritten.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RittenIndexRoute = RittenIndexRouteImport.update({
+  id: '/ritten/',
+  path: '/ritten/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RittenIdRoute = RittenIdRouteImport.update({
+  id: '/ritten/$id',
+  path: '/ritten/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ritten/$id': typeof RittenIdRoute
+  '/ritten/': typeof RittenIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ritten/$id': typeof RittenIdRoute
+  '/ritten': typeof RittenIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ritten/$id': typeof RittenIdRoute
+  '/ritten/': typeof RittenIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/ritten/$id' | '/ritten/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/ritten/$id' | '/ritten'
+  id: '__root__' | '/' | '/ritten/$id' | '/ritten/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RittenIdRoute: typeof RittenIdRoute
+  RittenIndexRoute: typeof RittenIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ritten/': {
+      id: '/ritten/'
+      path: '/ritten'
+      fullPath: '/ritten/'
+      preLoaderRoute: typeof RittenIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ritten/$id': {
+      id: '/ritten/$id'
+      path: '/ritten/$id'
+      fullPath: '/ritten/$id'
+      preLoaderRoute: typeof RittenIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RittenIdRoute: RittenIdRoute,
+  RittenIndexRoute: RittenIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
