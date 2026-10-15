@@ -4,21 +4,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
-
 @theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -42,6 +29,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -62,26 +51,31 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --radius: 0.875rem;
+  --background: oklch(0.97 0.004 264);
+  --foreground: oklch(0.15 0.005 264);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: oklch(0.15 0.005 264);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --popover-foreground: oklch(0.15 0.005 264);
+  --primary: oklch(0.6 0.2 254);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.93 0.005 264);
+  --secondary-foreground: oklch(0.15 0.005 264);
+  --muted: oklch(0.93 0.005 264);
+  --muted-foreground: oklch(0.52 0.01 264);
+  --accent: oklch(0.6 0.2 254 / 12%);
+  --accent-foreground: oklch(0.6 0.2 254);
+  --destructive: oklch(0.63 0.23 27);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.7 0.18 150);
+  --warning: oklch(0.75 0.16 70);
+  --border: oklch(0.88 0.005 264);
+  --input: oklch(0.9 0.005 264);
+  --ring: oklch(0.6 0.2 254);
+  --glass: oklch(1 0 0 / 78%);
+  --map-track: oklch(0.6 0.2 254);
+  --map-route: oklch(0.55 0.05 264);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -97,48 +91,82 @@
   --sidebar-ring: oklch(0.704 0.04 256.788);
 }
 
-.dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0 0 0);
+    --foreground: oklch(0.98 0 0);
+    --card: oklch(0.21 0.004 264);
+    --card-foreground: oklch(0.98 0 0);
+    --popover: oklch(0.21 0.004 264);
+    --popover-foreground: oklch(0.98 0 0);
+    --primary: oklch(0.65 0.19 254);
+    --secondary: oklch(0.27 0.005 264);
+    --secondary-foreground: oklch(0.98 0 0);
+    --muted: oklch(0.27 0.005 264);
+    --muted-foreground: oklch(0.7 0.01 264);
+    --accent: oklch(0.65 0.19 254 / 20%);
+    --accent-foreground: oklch(0.75 0.15 254);
+    --border: oklch(0.33 0.005 264);
+    --input: oklch(0.3 0.005 264);
+    --glass: oklch(0.2 0.004 264 / 80%);
+    --map-track: oklch(0.7 0.17 254);
+    --map-route: oklch(0.75 0.03 264);
+  }
+}
+
+@utility glass {
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 8px 30px -8px oklch(0 0 0 / 25%), 0 0 0 0.5px oklch(0.5 0 0 / 20%);
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--card);
+    backdrop-filter: none;
+  }
+}
+
+@utility press {
+  transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 120ms;
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+}
+
+@utility sheet-in {
+  animation: sheet-in 380ms cubic-bezier(0.32, 1.25, 0.5, 1);
+}
+
+@keyframes sheet-in {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.user-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--primary);
+  border: 3px solid white;
+  box-shadow: 0 0 0 8px oklch(0.6 0.2 254 / 22%), 0 2px 6px oklch(0 0 0 / 30%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
   }
-
-  body {
+  html, body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 }
