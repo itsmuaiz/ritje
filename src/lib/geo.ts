@@ -12,7 +12,7 @@ export async function searchPlaces(q: string, near?: { lat: number; lng: number 
   if (!r.ok) throw new Error("Zoeken mislukt");
   const j: Array<{ lat: string; lon: string; name?: string; display_name: string; address?: Record<string, string> }> = await r.json();
   return j.map((x) => ({
-    name: x.name || x.display_name.split(",")[0],
+    name: x.name || x.display_name.split(",")[0] || x.display_name,
     address: shortAddr(x.address) || x.display_name.split(",").slice(0, 3).join(","),
     lat: +x.lat,
     lng: +x.lon,
@@ -21,8 +21,8 @@ export async function searchPlaces(q: string, near?: { lat: number; lng: number 
 
 function shortAddr(a?: Record<string, string>) {
   if (!a) return "";
-  const street = [a.road, a.house_number].filter(Boolean).join(" ");
-  const city = a.city || a.town || a.village || a.municipality || "";
+  const street = [a["road"], a["house_number"]].filter(Boolean).join(" ");
+  const city = a["city"] || a["town"] || a["village"] || a["municipality"] || "";
   return [street, city].filter(Boolean).join(", ");
 }
 
@@ -92,7 +92,7 @@ function stepText(s: any) {
     case "fork":
       return `Houd ${m.modifier?.includes("left") ? "links" : "rechts"} aan${road}`;
     default:
-      return `${mod ? mod[0].toUpperCase() + mod.slice(1) : "Ga verder"}${road}`;
+      return `${mod ? mod.charAt(0).toUpperCase() + mod.slice(1) : "Ga verder"}${road}`;
   }
 }
 
@@ -101,8 +101,9 @@ export function distToLine(p: { lat: number; lng: number }, line: LngLat[]) {
   const k = Math.cos((p.lat * Math.PI) / 180) * 111320;
   let best = Infinity;
   for (let i = 0; i < line.length - 1; i++) {
-    const ax = (line[i][0] - p.lng) * k, ay = (line[i][1] - p.lat) * 110540;
-    const bx = (line[i + 1][0] - p.lng) * k, by = (line[i + 1][1] - p.lat) * 110540;
+    const A = line[i]!, B = line[i + 1]!;
+    const ax = (A[0] - p.lng) * k, ay = (A[1] - p.lat) * 110540;
+    const bx = (B[0] - p.lng) * k, by = (B[1] - p.lat) * 110540;
     const dx = bx - ax, dy = by - ay;
     const L = dx * dx + dy * dy;
     let t = L ? -(ax * dx + ay * dy) / L : 0;

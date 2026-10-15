@@ -99,7 +99,7 @@ export function ingest(a: ActiveTrip, p: Pt): { trip: ActiveTrip; accepted: bool
   if (d < minMove) return { trip: a, accepted: false, weak }; // stationary jitter
   if (dt > 0 && d / dt > 70) return { trip: a, accepted: false, weak }; // > 250 km/h jump
   const segs = a.segments.slice();
-  segs[segs.length - 1] = [...segs[segs.length - 1], p];
+  segs[segs.length - 1] = [...(segs[segs.length - 1] ?? []), p];
   return { trip: { ...a, segments: segs, km: a.km + d / 1000, last: p }, accepted: true, weak };
 }
 

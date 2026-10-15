@@ -144,7 +144,7 @@ function Drive() {
       if (d < bestD) { bestD = d; best = i; }
     });
     const idx = bestD < 30 ? Math.min(best + 1, route.steps.length - 1) : Math.max(1, best);
-    const step = route.steps[idx];
+    const step = route.steps[idx]!;
     const toStep = haversine(pos, { lat: step.loc[1], lng: step.loc[0] });
     const rest = route.steps.slice(idx).reduce((s, x) => s + x.distance, 0) + toStep - step.distance;
     const remaining = Math.max(toStep, rest);
@@ -196,12 +196,12 @@ function Drive() {
     setNavOn(false);
     try { await wake.current?.release(); } catch { /* noop */ }
     const pts = a.segments.flat();
-    const first = pts[0], last = pts[pts.length - 1];
+    const first = pts[0], last = pts[pts.length - 1] ?? pts[0];
     const s: Summary = { trip: a, end: Date.now(), from: "Adres ophalen…", to: "Adres ophalen…" };
     if (!first) { s.from = "Onbekend (geen GPS-signaal)"; s.to = "Onbekend (geen GPS-signaal)"; }
     setSummary(s); setNote("");
     if (first) {
-      const [from, to] = await Promise.all([reverseGeocode(first.lat, first.lng), reverseGeocode(last.lat, last.lng)]);
+      const [from, to] = await Promise.all([reverseGeocode(first.lat, first.lng), reverseGeocode(last!.lat, last!.lng)]);
       setSummary((cur) => (cur ? { ...cur, from, to } : cur));
     }
   }
@@ -423,7 +423,7 @@ function Modal({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ManeuverIcon({ type, modifier }: { type: string; modifier?: string }) {
+function ManeuverIcon({ type, modifier }: { type: string; modifier?: string | undefined }) {
   const c = "size-8";
   if (type === "arrive") return <Flag className={c} />;
   if (type === "roundabout" || type === "rotary") return <RotateCw className={c} />;

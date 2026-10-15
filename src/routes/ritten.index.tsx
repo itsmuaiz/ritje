@@ -32,8 +32,8 @@ function Trips() {
     t.filter((x) => isCoordLabel(x.from) || isCoordLabel(x.to)).slice(0, 5).forEach(async (x) => {
       const pts = x.segments.flat();
       if (!pts.length) return;
-      const f = isCoordLabel(x.from) ? await reverseGeocode(pts[0].lat, pts[0].lng) : x.from;
-      const e = isCoordLabel(x.to) ? await reverseGeocode(pts[pts.length - 1].lat, pts[pts.length - 1].lng) : x.to;
+      const f = isCoordLabel(x.from) ? await reverseGeocode(pts[0]!.lat, pts[0]!.lng) : x.from;
+      const e = isCoordLabel(x.to) ? await reverseGeocode(pts[pts.length - 1]!.lat, pts[pts.length - 1]!.lng) : x.to;
       updateTrip(x.id, { from: f, to: e });
       setTrips(loadTrips());
     });
