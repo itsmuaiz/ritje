@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { LngLat } from "@/lib/geo";
 
@@ -114,6 +114,6 @@ export default function MapView({ user, track, route, dest, follow, fit, interac
   return <div ref={el} className={className} />;
 }
 
-function emptyFc(): GeoJSON.FeatureCollection {
+function emptyFc(): any {
   return { type: "FeatureCollection", features: [] };
 }
