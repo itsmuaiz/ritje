@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Car, Clock, MapPin, Navigation, Search, Square, X, AlertTriangle, ChevronRight, CornerUpLeft, CornerUpRight, ArrowUp, RotateCw, Flag, LocateFixed } from "lucide-react";
 import { toast } from "sonner";
+import { createPortal } from "react-dom";
 import { LazyMap } from "@/components/LazyMap";
 import {
   type ActiveTrip, type Place, type Pt,
@@ -465,10 +466,11 @@ function Row({ label, value, sub }: { label: string; value: string; sub: string 
 }
 
 function Modal({ children }: { children: React.ReactNode }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-foreground/30 p-3 pb-[max(env(safe-area-inset-bottom),12px)] sm:items-center" role="dialog" aria-modal="true">
       <div className="sheet-in max-h-full w-full max-w-md overflow-y-auto rounded-[28px] bg-card p-6 text-center">{children}</div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
