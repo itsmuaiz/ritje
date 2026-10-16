@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { LazyMap } from "@/components/LazyMap";
-import { type Trip, deleteTrip, fmtDate, fmtDur, fmtKm, fmtTime, haptic, loadTrips, updateTrip } from "@/lib/trips";
+import { type Trip, deleteTrip, fmtDate, fmtDur, fmtKm, fmtTime, fmtOdo, parseOdo, haptic, loadTrips, saveTrips, updateTrip } from "@/lib/trips";
 import type { LngLat } from "@/lib/geo";
 
 export const Route = createFileRoute("/ritten/$id")({
@@ -23,12 +23,14 @@ function Detail() {
   const nav = useNavigate();
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
   const [note, setNote] = useState("");
+  const [odoEnd, setOdoEnd] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
   useEffect(() => {
     const t = loadTrips().find((x) => x.id === id) ?? null;
     setTrip(t);
     setNote(t?.note ?? "");
+    setOdoEnd(t?.odoEnd != null ? fmtOdo(t.odoEnd) : "");
   }, [id]);
 
   const track = useMemo(() => (trip?.segments ?? []).map((s) => s.map((p) => [p.lng, p.lat] as LngLat)), [trip]);
@@ -63,6 +65,34 @@ function Detail() {
           <Item k="Eindtijd" v={fmtTime(trip.end)} />
           <Item k="Duur" v={fmtDur(trip.end - trip.start)} />
         </dl>
+        {trip.odoStart != null && (
+          <dl className="mt-4 overflow-hidden rounded-2xl bg-card">
+            <Item k="Beginstand" v={`${fmtOdo(trip.odoStart)} km`} />
+            <Item k="Gereden (GPS)" v={`${fmtKm(trip.km)} km`} />
+            <Item k="Verwachte eindstand" v={`${fmtOdo(trip.odoStart + trip.km)} km`} />
+          </dl>
+        )}
+        <label className="mt-4 block rounded-2xl bg-card p-4 text-sm text-muted-foreground">
+          Eindstand op dashboard
+          <input
+            value={odoEnd}
+            onChange={(e) => setOdoEnd(e.target.value)}
+            inputMode="numeric"
+            onBlur={() => {
+              const v = parseOdo(odoEnd);
+              if (odoEnd.trim() && v == null) { toast.error("Ongeldige eindstand"); return; }
+              if (v != null && trip.odoStart != null && v < trip.odoStart) { toast.error("Eindstand is lager dan de beginstand"); return; }
+              if (v === trip.odoEnd) return;
+              const { odoEnd: _o, ...rest } = trip;
+              const next: Trip = v != null ? { ...rest, odoEnd: v } : rest;
+              const all = loadTrips().map((x) => (x.id === trip.id ? next : x));
+              saveTrips(all);
+              setTrip(next); haptic(); toast.success("Eindstand opgeslagen");
+            }}
+            placeholder="Bijv. 45.268"
+            className="mt-1 min-h-11 w-full bg-transparent text-[17px] tabular-nums text-foreground outline-none"
+          />
+        </label>
         <label className="mt-4 block rounded-2xl bg-card p-4 text-sm text-muted-foreground">
           Omschrijving
           <input
