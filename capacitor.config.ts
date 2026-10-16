@@ -6,10 +6,6 @@ const config: CapacitorConfig = {
   appId: "app.lovable.rijdenrit",
   appName: "Rijden — Rit",
   webDir: "dist",
-  server: {
-  url: "https://ritje.lovable.app",
-  cleartext: false,
-},
   // Lovable apps are SPAs; bundledWebRuntime stays false (we ship the web build).
   plugins: {
     SplashScreen: {
