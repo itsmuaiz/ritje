@@ -1,0 +1,424 @@
+name: Nativize Build
+
+# Manual trigger so builds don't fire on every push. Run it from the
+# Actions tab once your web build + Capacitor config are committed.
+on:
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Android (.apk + .aab)
+    if: ${{ false }}  # Android builds require a paid Nativize plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install deps + build web
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm install --no-save --legacy-peer-deps typescript @capacitor/core@^8 @capacitor/cli@^8 @capacitor/android@^8 @capacitor/splash-screen@^8
+          npm run build
+          bash ./nativize-inject.sh
+      - name: Add Android platform + sync
+        run: |
+          if [ -d android ]; then echo 'android already added'; else npx cap add android; fi
+          bash ./nativize-patch-android.sh
+          npx cap sync android
+
+          bash ./nativize-permissions.sh
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Bundle release AAB (unsigned)
+        working-directory: android
+        run: ./gradlew bundleRelease --stacktrace
+      - name: Stage Android download
+        run: |
+          rm -rf "nativize-downloads/Nativized Android"
+          mkdir -p "nativize-downloads/Nativized Android/builds" "nativize-downloads/Nativized Android/project"
+          cp NATIVIZE_README.md "nativize-downloads/Nativized Android/NATIVIZE_README.md"
+          cp android/app/build/outputs/apk/debug/*.apk "nativize-downloads/Nativized Android/builds/" || true
+          cp android/app/build/outputs/bundle/release/*.aab "nativize-downloads/Nativized Android/builds/" || true
+          rsync -a --exclude 'build' android "nativize-downloads/Nativized Android/project/"
+          cp capacitor.config.ts "nativize-downloads/Nativized Android/project/capacitor.config.ts"
+      - name: Upload Nativized Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nativized Android
+          path: nativize-downloads/Nativized Android/**
+          if-no-files-found: error
+
+  ios:
+    name: iOS (compile, unsigned)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps + build web
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm install --no-save --legacy-peer-deps typescript @capacitor/core@^8 @capacitor/cli@^8 @capacitor/ios@^8 @capacitor/splash-screen@^8
+          npm run build
+          bash ./nativize-inject.sh
+      - name: Add iOS platform + sync
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: |
+          # A committed ios/ can be an incomplete stub (no Xcode project / Podfile),
+          # which makes 'cap sync' fail. Recreate it cleanly in that case.
+          if [ ! -f ios/App/App.xcodeproj/project.pbxproj ] && [ ! -f ios/App/Podfile ]; then
+            rm -rf ios
+            npx cap add ios
+          fi
+          npx cap sync ios
+
+          bash ./nativize-permissions.sh
+
+
+      - name: AdMob iOS guard (GADApplicationIdentifier)
+        run: |
+          # iOS counterpart of the Android AdMob fix: the Google Mobile Ads SDK
+          # crashes at launch if Info.plist lacks GADApplicationIdentifier. Inject
+          # Google's TEST id when AdMob is used. >>> Replace with YOUR id before release. <<<
+          PLIST=ios/App/App/Info.plist
+          if grep -qi admob package.json && [ -f "$PLIST" ] && ! /usr/libexec/PlistBuddy -c 'Print :GADApplicationIdentifier' "$PLIST" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c 'Add :GADApplicationIdentifier string ca-app-pub-3940256099942544~3347511713' "$PLIST"
+            echo 'Injected GADApplicationIdentifier (TEST id) to prevent the iOS AdMob launch crash.'
+          fi
+      - name: Resolve native dependencies
+        working-directory: ios/App
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: |
+          if [ -f Podfile ]; then pod install; else echo 'No Podfile (SPM) - resolved during build'; fi
+      - name: Compile app (no signing - validates the build for free)
+        working-directory: ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then PROJ='-workspace App.xcworkspace'; else PROJ='-project App.xcodeproj'; fi
+          xcodebuild $PROJ \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+      - name: Compile for iOS Simulator (runnable in Xcode Simulator)
+        working-directory: ios/App
+        run: |
+          DEVICE=$(python3 - <<'PY'
+          import json, subprocess, sys
+          data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+          candidates = []
+          for runtime, devices in data.get('devices', {}).items():
+              if 'iOS' not in runtime:
+                  continue
+              for device in devices:
+                  if device.get('isAvailable') and 'iPhone' in device.get('name', ''):
+                      candidates.append(device)
+          if not candidates:
+              raise SystemExit('No available iPhone simulator found')
+          booted = next((device for device in candidates if device.get('state') == 'Booted'), None)
+          print((booted or candidates[0])['udid'])
+          PY
+          )
+          echo "Using iOS simulator: $DEVICE"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          if [ -d App.xcworkspace ]; then PROJ='-workspace App.xcworkspace'; else PROJ='-project App.xcodeproj'; fi
+          xcodebuild $PROJ \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath DerivedDataSim \
+            clean build
+          echo "$DEVICE" > DerivedDataSim/nativize-simulator-udid.txt
+      - name: Smoke test iOS Simulator launch
+        working-directory: ios/App
+        run: |
+          APP_PATH=$(find DerivedDataSim/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -type d | head -n 1)
+          test -d "$APP_PATH"
+          if [ -f DerivedDataSim/nativize-simulator-udid.txt ]; then
+            DEVICE=$(cat DerivedDataSim/nativize-simulator-udid.txt)
+          else
+            DEVICE=$(python3 - <<'PY'
+          import json, subprocess, sys
+          data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+          candidates = []
+          for runtime, devices in data.get('devices', {}).items():
+              if 'iOS' not in runtime:
+                  continue
+              for device in devices:
+                  if device.get('isAvailable') and 'iPhone' in device.get('name', ''):
+                      candidates.append(device)
+          if not candidates:
+              raise SystemExit('No available iPhone simulator found')
+          booted = next((device for device in candidates if device.get('state') == 'Booted'), None)
+          print((booted or candidates[0])['udid'])
+          PY
+            )
+          fi
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist" 2>/dev/null || true)
+          if [ -z "$BUNDLE_ID" ] || [[ "$BUNDLE_ID" == *'$('* ]]; then BUNDLE_ID="app.lovable.rijdenrit"; fi
+          APP_EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist" 2>/dev/null || echo App)
+          echo "Smoke testing $BUNDLE_ID from $APP_PATH"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP_PATH"
+          LAUNCH_LOG=$(mktemp)
+          set +e
+          xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" >"$LAUNCH_LOG" 2>&1
+          STATUS=$?
+          cat "$LAUNCH_LOG"
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            echo '::group::iOS simulator launch diagnostics'
+            echo "Built app: $APP_PATH"
+            /usr/bin/file "$APP_PATH/$APP_EXEC" || true
+            codesign -dv --verbose=4 "$APP_PATH" 2>&1 || true
+            xcrun simctl get_app_container "$DEVICE" "$BUNDLE_ID" app || true
+            xcrun simctl spawn "$DEVICE" log show --last 3m --style compact --predicate "process == '$APP_EXEC' OR eventMessage CONTAINS[c] '$BUNDLE_ID' OR eventMessage CONTAINS[c] 'code signature' OR eventMessage CONTAINS[c] 'crash'" || true
+            echo '::endgroup::'
+            exit "$STATUS"
+          fi
+          sleep 4
+          xcrun simctl terminate "$DEVICE" "$BUNDLE_ID" || true
+      - name: Package iOS Simulator preview
+        working-directory: ios/App
+        run: |
+          APP_PATH=$(find DerivedDataSim/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -type d | head -n 1)
+          test -d "$APP_PATH"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist" 2>/dev/null || true)
+          if [ -z "$BUNDLE_ID" ] || [[ "$BUNDLE_ID" == *'$('* ]]; then BUNDLE_ID="app.lovable.rijdenrit"; fi
+          rm -rf "../nativize-downloads/Nativized iOS Preview"
+          mkdir -p "../nativize-downloads/Nativized iOS Preview"
+          mkdir -p "../nativize-downloads/Nativized iOS Preview/payload"
+          cp ../../NATIVIZE_README.md "../nativize-downloads/Nativized iOS Preview/NATIVIZE_README.md"
+          ditto "$APP_PATH" "../nativize-downloads/Nativized iOS Preview/payload/$(basename "$APP_PATH")"
+          (cd "../nativize-downloads/Nativized iOS Preview/payload" && /usr/bin/tar -czf ../ios-simulator-preview-app.tar.gz "$(basename "$APP_PATH")")
+          rm -rf "../nativize-downloads/Nativized iOS Preview/payload"
+          cat > "../nativize-downloads/Nativized iOS Preview/README.txt" <<'EOF'
+          Nativize iOS Simulator preview
+
+          This is not a Mac app and should not be double-clicked.
+          Chrome downloads this package safely because the simulator app is stored inside:
+          ios-simulator-preview-app.tar.gz
+
+          To open it on a Mac with Xcode installed:
+          1. Unzip this download.
+          2. Open Terminal.
+          3. Run:
+             cd into the unzipped Nativized iOS Preview folder
+             bash install-in-simulator.txt
+
+          If your unzipped folder has a different name, cd into that folder first,
+          then run:
+             bash install-in-simulator.txt
+          EOF
+          cat > "../nativize-downloads/Nativized iOS Preview/install-in-simulator.txt" <<'EOF'
+          # Recommended:
+          #   cd into the unzipped Nativized iOS Preview folder
+          #   bash install-in-simulator.txt
+          #
+          # If you pasted this whole file instead, it will also try to find the newest
+          # Nativize preview in Downloads/Desktop.
+          set -euo pipefail
+          HERE="$(pwd)"
+          if [ ! -f "$HERE/ios-simulator-preview-app.tar.gz" ]; then
+            FOUND="$(python3 - <<'PY'
+          from pathlib import Path
+          matches = []
+          for root in (Path.home() / 'Downloads', Path.home() / 'Desktop'):
+              if root.exists():
+                  matches.extend(root.glob('**/ios-simulator-preview-app.tar.gz'))
+          if matches:
+              print(max(matches, key=lambda p: p.stat().st_mtime))
+          PY
+            )"
+            if [ -n "$FOUND" ]; then
+              HERE="$(cd "$(dirname "$FOUND")" && pwd)"
+              echo "Using Nativize preview folder: $HERE"
+            else
+              echo 'Could not find ios-simulator-preview-app.tar.gz. Unzip the download, then run these commands from that folder.'
+              exit 1
+            fi
+          fi
+          /usr/bin/tar -xzf "$HERE/ios-simulator-preview-app.tar.gz" -C "$HERE"
+          APP_PATH="$(find "$HERE" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ ! -d "$APP_PATH" ]; then echo 'No iOS Simulator .app found after extracting the preview payload.'; exit 1; fi
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist" 2>/dev/null || true)"
+          if [ -z "$BUNDLE_ID" ] || [[ "$BUNDLE_ID" == *'$('* ]]; then BUNDLE_ID="app.lovable.rijdenrit"; fi
+          DEVICE="${1:-}"
+          if [ -z "$DEVICE" ]; then
+            DEVICE=$(python3 - <<'PY'
+          import json, subprocess, sys
+          data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+          candidates = []
+          for runtime, devices in data.get('devices', {}).items():
+              if 'iOS' not in runtime:
+                  continue
+              for device in devices:
+                  if device.get('isAvailable') and 'iPhone' in device.get('name', ''):
+                      candidates.append(device)
+          if not candidates:
+              raise SystemExit('No available iPhone simulator found')
+          booted = next((device for device in candidates if device.get('state') == 'Booted'), None)
+          print((booted or candidates[0])['udid'])
+          PY
+            )
+          fi
+          open -a Simulator || true
+          xcrun simctl boot "$DEVICE" 2>/dev/null || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP_PATH"
+          xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID"
+          EOF
+      - name: Upload tested iOS Simulator preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nativized iOS Preview
+          path: ios/nativize-downloads/Nativized iOS Preview/**
+          if-no-files-found: error
+      - name: Stage iOS Xcode project
+        if: ${{ false }}  # Xcode project download requires a paid Nativize plan
+        run: |
+          rm -rf "nativize-downloads/Nativized iOS"
+          mkdir -p "nativize-downloads/Nativized iOS/project"
+          cp NATIVIZE_README.md "nativize-downloads/Nativized iOS/NATIVIZE_README.md"
+          rsync -a --exclude 'DerivedData' --exclude 'DerivedDataSim' ios "nativize-downloads/Nativized iOS/project/"
+          cp capacitor.config.ts "nativize-downloads/Nativized iOS/project/capacitor.config.ts"
+      - name: Upload Nativized iOS
+        if: ${{ false }}  # Xcode project download requires a paid Nativize plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nativized iOS
+          path: nativize-downloads/Nativized iOS/**
+          if-no-files-found: error
+
+  # ---- Desktop apps (Electron) - double-click .dmg / .exe ----
+  desktop-mac:
+    name: Desktop (macOS .dmg)
+    if: ${{ false }}  # macOS builds require a paid Nativize plan
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps + build web
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          bash ./nativize-inject.sh
+      - name: Package desktop app
+        run: |
+          rm -rf desktop/app && cp -r dist desktop/app
+          cd desktop
+          npm install
+          npx --no-install electron-builder --mac --publish never
+      - name: Stage macOS desktop app
+        run: |
+          rm -rf "desktop/nativize-downloads/Nativized Desktop"
+          mkdir -p "desktop/nativize-downloads/Nativized Desktop"
+          cp NATIVIZE_README.md "desktop/nativize-downloads/Nativized Desktop/NATIVIZE_README.md"
+          cp desktop/out/*.dmg "desktop/nativize-downloads/Nativized Desktop/"
+      - name: Upload Nativized Desktop
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nativized Desktop
+          path: desktop/nativize-downloads/Nativized Desktop/**
+          if-no-files-found: error
+
+  desktop-windows:
+    name: Desktop (Windows .exe)
+    if: ${{ false }}  # Windows builds require a paid Nativize plan
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps + build web
+        shell: bash
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          bash ./nativize-inject.sh
+      - name: Package desktop app
+        shell: bash
+        run: |
+          rm -rf desktop/app && cp -r dist desktop/app
+          cd desktop
+          npm install
+          npx --no-install electron-builder --win --publish never
+      - name: Stage Windows desktop app
+        shell: bash
+        run: |
+          rm -rf "desktop/nativize-downloads/Nativized Windows"
+          mkdir -p "desktop/nativize-downloads/Nativized Windows"
+          cp NATIVIZE_README.md "desktop/nativize-downloads/Nativized Windows/NATIVIZE_README.md"
+          cp desktop/out/*.exe "desktop/nativize-downloads/Nativized Windows/"
+      - name: Upload Nativized Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nativized Windows
+          path: desktop/nativize-downloads/Nativized Windows/**
+          if-no-files-found: error
+
+  # ---- Materialize native projects INTO the repo so 'Download Full Source Code'
+  #      actually contains ios/ + android/ (Capacitor generates them on the fly;
+  #      this commits them back so the downloaded project is complete & openable).
+  materialize-project:
+    name: Commit native projects into the repo
+    if: ${{ false }}  # Full native project materialization requires a paid Nativize plan
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps + build web
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          bash ./nativize-inject.sh
+      - name: Generate native projects (idempotent)
+        run: |
+          if [ ! -f ios/App/App.xcodeproj/project.pbxproj ] && [ ! -f ios/App/Podfile ]; then rm -rf ios; npx cap add ios; fi
+          if [ ! -d android/app ]; then npx cap add android; fi
+          bash ./nativize-patch-android.sh
+
+          npx cap sync
+          bash ./nativize-permissions.sh
+
+
+          # iOS AdMob guard so the committed project doesn't crash on launch.
+          PLIST=ios/App/App/Info.plist
+          if grep -qi admob package.json && [ -f "$PLIST" ] && ! /usr/libexec/PlistBuddy -c 'Print :GADApplicationIdentifier' "$PLIST" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c 'Add :GADApplicationIdentifier string ca-app-pub-3940256099942544~3347511713' "$PLIST"
+          fi
+      - name: Commit ios/ + android/ + desktop/ back to the repo
+        run: |
+          git config user.name 'nativize-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ios android desktop
+          if git diff --cached --quiet; then
+            echo 'Native projects already up to date.'
+          else
+            git commit -m 'chore(nativize): materialize ios/android native projects [skip ci]'
+            git push
+          fi

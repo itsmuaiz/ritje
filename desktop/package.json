@@ -1,0 +1,38 @@
+{
+  "name": "rijdenrit-desktop",
+  "version": "1.0.0",
+  "description": "Rijden — Rit desktop app",
+  "author": "Nativize",
+  "main": "main.js",
+  "scripts": {
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron-serve": "^1.3.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "app.lovable.rijdenrit",
+    "productName": "Rijden — Rit",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "out"
+    },
+    "mac": {
+      "target": "dmg",
+      "identity": null
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
