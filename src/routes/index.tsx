@@ -466,8 +466,8 @@ function Row({ label, value, sub }: { label: string; value: string; sub: string 
 
 function Modal({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-3 pb-[max(env(safe-area-inset-bottom),12px)] sm:items-center" role="dialog" aria-modal="true">
-      <div className="sheet-in w-full max-w-md rounded-[28px] bg-card p-6 text-center">{children}</div>
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-foreground/30 p-3 pb-[max(env(safe-area-inset-bottom),12px)] sm:items-center" role="dialog" aria-modal="true">
+      <div className="sheet-in max-h-full w-full max-w-md overflow-y-auto rounded-[28px] bg-card p-6 text-center">{children}</div>
     </div>
   );
 }
