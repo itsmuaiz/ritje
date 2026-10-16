@@ -5,7 +5,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: "app.lovable.rijdenrit",
   appName: "Rijden — Rit",
-  webDir: "dist",
+  webDir: '.output/public',
   // Lovable apps are SPAs; bundledWebRuntime stays false (we ship the web build).
   plugins: {
     SplashScreen: {
