@@ -77,7 +77,7 @@ export default function MapView({ user, track, route, dest, follow, fit, interac
       if (all.length > 1) {
         const b = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
         m.fitBounds(b, { padding: 50, duration: 0 });
-      } else if (all.length === 1) m.jumpTo({ center: all[0], zoom: 15 });
+      } else if (all.length === 1) m.jumpTo({ center: all[0]!, zoom: 15 });
     }
   }
 
