@@ -9,6 +9,8 @@ export type Trip = {
   from: string;
   to: string;
   note: string;
+  odoStart?: number; // km on dashboard at departure
+  odoEnd?: number; // confirmed/corrected km on dashboard at arrival
 };
 export type ActiveTrip = {
   start: number;
@@ -16,6 +18,7 @@ export type ActiveTrip = {
   segments: Pt[][];
   gaps: number;
   last?: Pt;
+  odoStart?: number;
 };
 
 const TRIPS = "rit.trips.v1";
@@ -103,6 +106,22 @@ export function ingest(a: ActiveTrip, p: Pt): { trip: ActiveTrip; accepted: bool
   return { trip: { ...a, segments: segs, km: a.km + d / 1000, last: p }, accepted: true, weak };
 }
 
+/** Parse a Dutch odometer string like "45.230" or "45230,5" to km. */
+export function parseOdo(v: string): number | undefined {
+  const c = v.replace(/\s|km/gi, "").replace(/\./g, "").replace(",", ".");
+  if (!c) return undefined;
+  const n = Number(c);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+const odoNum = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
+export const fmtOdo = (km: number) => odoNum.format(Math.round(km));
+/** Expected end odometer: start + GPS-measured km (never planned route distance). */
+export const expectedOdo = (odoStart: number, km: number) => Math.round(odoStart + km);
+export function lastOdo(): number | undefined {
+  const t = loadTrips().find((x) => x.odoEnd != null);
+  return t?.odoEnd;
+}
+
 const nlNum = new Intl.NumberFormat("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const fmtKm = (km: number) => nlNum.format(km);
 export const fmtTime = (t: number) =>
@@ -131,10 +150,10 @@ export function haptic(ms = 12) {
 
 export function toCsv(trips: Trip[]) {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const rows = [["Datum", "Starttijd", "Eindtijd", "Vertrek", "Aankomst", "Kilometers", "Omschrijving", "Meetgaten"].join(";")];
+  const rows = [["Datum", "Starttijd", "Eindtijd", "Vertrek", "Aankomst", "Kilometers", "Omschrijving", "Meetgaten", "Beginstand", "Eindstand"].join(";")];
   for (const t of [...trips].reverse())
     rows.push(
-      [fmtDateShort(t.start), fmtTime(t.start), fmtTime(t.end), esc(t.from), esc(t.to), fmtKm(t.km), esc(t.note), t.gaps].join(";"),
+      [fmtDateShort(t.start), fmtTime(t.start), fmtTime(t.end), esc(t.from), esc(t.to), fmtKm(t.km), esc(t.note), t.gaps, t.odoStart != null ? fmtOdo(t.odoStart) : "", t.odoEnd != null ? fmtOdo(t.odoEnd) : ""].join(";"),
     );
   return "\uFEFF" + rows.join("\n");
 }

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { LazyMap } from "@/components/LazyMap";
 import {
   type ActiveTrip, type Place, type Pt,
-  addTrip, fmtDist, fmtDur, fmtKm, fmtTime, fmtDate, haptic, haversine, ingest, loadActive, loadRecent, pushRecent, saveActive,
+  addTrip, expectedOdo, fmtOdo, lastOdo, parseOdo, fmtDist, fmtDur, fmtKm, fmtTime, fmtDate, haptic, haversine, ingest, loadActive, loadRecent, pushRecent, saveActive,
 } from "@/lib/trips";
 import { type Route as NavRoute, type LngLat, distToLine, getRoute, reverseGeocode, searchPlaces } from "@/lib/geo";
 
@@ -40,6 +40,9 @@ function Drive() {
   const [note, setNote] = useState("");
   const [recent, setRecent] = useState<Place[]>([]);
   const [showPerm, setShowPerm] = useState(false);
+  const [startSheet, setStartSheet] = useState<{ withNav: boolean } | null>(null);
+  const [odoIn, setOdoIn] = useState("");
+  const [odoEndIn, setOdoEndIn] = useState("");
   const activeRef = useRef<ActiveTrip | null>(null);
   const watchId = useRef<number | null>(null);
   const lastReroute = useRef(0);
@@ -177,8 +180,18 @@ function Drive() {
   function beginTrip(withNav: boolean) {
     if (activeRef.current) return; // never two at once
     if (!localStorage.getItem("rit.permExplained")) { setShowPerm(true); return; }
+    const lo = lastOdo();
+    setOdoIn(lo != null ? fmtOdo(lo) : "");
+    setStartSheet({ withNav });
+  }
+
+  function confirmStart(withNav: boolean) {
+    if (activeRef.current) return;
+    const odoStart = parseOdo(odoIn);
+    if (odoIn.trim() && odoStart == null) { toast.error("Ongeldige kilometerstand"); return; }
+    setStartSheet(null);
     haptic(20);
-    const a: ActiveTrip = { start: Date.now(), km: 0, segments: [], gaps: 0 };
+    const a: ActiveTrip = { start: Date.now(), km: 0, segments: [], gaps: 0, ...(odoStart != null ? { odoStart } : {}) };
     if (pos && (pos.acc ?? 0) <= 60 && Date.now() - pos.t < 15000) {
       a.segments = [[pos]]; a.last = pos;
     }
@@ -200,6 +213,7 @@ function Drive() {
     const s: Summary = { trip: a, end: Date.now(), from: "Adres ophalen…", to: "Adres ophalen…" };
     if (!first) { s.from = "Onbekend (geen GPS-signaal)"; s.to = "Onbekend (geen GPS-signaal)"; }
     setSummary(s); setNote("");
+    setOdoEndIn(a.odoStart != null ? fmtOdo(expectedOdo(a.odoStart, a.km)) : "");
     if (first) {
       const [from, to] = await Promise.all([reverseGeocode(first.lat, first.lng), reverseGeocode(last!.lat, last!.lng)]);
       setSummary((cur) => (cur ? { ...cur, from, to } : cur));
@@ -209,7 +223,11 @@ function Drive() {
   function saveSummary() {
     if (!summary) return;
     const { trip: a } = summary;
+    const odoEnd = parseOdo(odoEndIn);
+    if (odoEndIn.trim() && odoEnd == null) { toast.error("Ongeldige eindstand"); return; }
+    if (a.odoStart != null && odoEnd != null && odoEnd < a.odoStart) { toast.error("Eindstand is lager dan de beginstand"); return; }
     addTrip({
+      ...(a.odoStart != null ? { odoStart: a.odoStart } : {}), ...(odoEnd != null ? { odoEnd } : {}),
       id: crypto.randomUUID(), start: a.start, end: summary.end, km: a.km, segments: a.segments, gaps: a.gaps,
       from: summary.from, to: summary.to, note: note.trim(),
     });
@@ -370,6 +388,23 @@ function Drive() {
         </Modal>
       )}
 
+      {startSheet && (
+        <Modal>
+          <Car className="mx-auto size-10 text-primary" />
+          <h2 className="mt-3 text-xl font-semibold">Rit starten</h2>
+          <label className="mt-4 block text-left text-sm font-medium">
+            Kilometerstand bij vertrek
+            <div className="mt-1 flex items-center rounded-xl bg-secondary pr-3 focus-within:ring-2 focus-within:ring-ring">
+              <input autoFocus value={odoIn} onChange={(e) => setOdoIn(e.target.value)} inputMode="numeric" placeholder="Bijv. 45.230" className="min-h-12 flex-1 bg-transparent px-3 text-[17px] tabular-nums outline-none" />
+              <span className="text-muted-foreground">km</span>
+            </div>
+          </label>
+          <p className="mt-1 text-left text-xs text-muted-foreground">De gereden afstand wordt met GPS gemeten, inclusief omwegen.</p>
+          <button onClick={() => confirmStart(startSheet.withNav)} className="press mt-5 min-h-14 w-full rounded-2xl bg-primary text-lg font-semibold text-primary-foreground">Start rit</button>
+          <button onClick={() => setStartSheet(null)} className="press mt-2 min-h-11 w-full font-medium text-primary">Annuleer</button>
+        </Modal>
+      )}
+
       {summary && (
         <Modal>
           <h2 className="text-xl font-semibold">Rit afgerond</h2>
@@ -379,6 +414,20 @@ function Drive() {
             <Row label="Vertrek" value={summary.from} sub={fmtTime(summary.trip.start)} />
             <Row label="Aankomst" value={summary.to} sub={fmtTime(summary.end)} />
           </dl>
+          {summary.trip.odoStart != null && (
+            <div className="mt-4 rounded-2xl bg-secondary p-4 text-left text-[15px]">
+              <dl className="space-y-2">
+                <div className="flex justify-between"><dt className="text-muted-foreground">Beginstand</dt><dd className="font-medium tabular-nums">{fmtOdo(summary.trip.odoStart)} km</dd></div>
+                <div className="flex justify-between"><dt className="text-muted-foreground">Gereden (GPS)</dt><dd className="font-medium tabular-nums">+ {fmtKm(summary.trip.km)} km</dd></div>
+                <div className="flex justify-between border-t border-border pt-2"><dt className="text-muted-foreground">Verwachte eindstand</dt><dd className="font-semibold tabular-nums">{fmtOdo(expectedOdo(summary.trip.odoStart, summary.trip.km))} km</dd></div>
+              </dl>
+              <label className="mt-3 block text-sm font-medium">
+                Eindstand op dashboard
+                <input value={odoEndIn} onChange={(e) => setOdoEndIn(e.target.value)} inputMode="numeric" aria-describedby="odo-hint" className="mt-1 min-h-12 w-full rounded-xl bg-card px-3 text-[17px] tabular-nums outline-none focus:ring-2 focus:ring-ring" />
+              </label>
+              <p id="odo-hint" className="mt-1 text-xs text-muted-foreground">GPS kan iets afwijken. Pas aan naar de echte stand op je dashboard.</p>
+            </div>
+          )}
           {summary.trip.gaps > 0 && <p className="mt-3 text-left text-xs text-warning">Deze rit bevat {summary.trip.gaps} meetgat(en) zonder GPS-signaal.</p>}
           <label className="mt-4 block text-left text-sm font-medium">
             Zakelijke omschrijving
